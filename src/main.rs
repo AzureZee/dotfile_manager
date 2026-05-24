@@ -3,13 +3,12 @@ use std::path::PathBuf;
 use std::process::Command;
 
 const DIR_NAME: &str = ".cfg";
+const NO_SHOW_UNTRACKED: &[&str] = &["config", "status.showUntrackedFiles", "no"];
 
 fn main() -> Result<()> {
     let args = args_parse();
     let Some(args) = args else {
-        // TODO: help message
-        help_message();
-        std::process::exit(1);
+        help(1);
     };
 
     run(args, CliEnv::new())
@@ -19,6 +18,10 @@ fn args_parse() -> Option<CliArgs> {
     let mut args = std::env::args().skip(1).peekable();
     let arg = args.peek()?;
     let action = match arg.as_str() {
+        "-h" | "--help" => {
+            help(0);
+        }
+
         "--init" => CliArgs::Init,
 
         "--clone" => {
@@ -42,7 +45,7 @@ fn args_parse() -> Option<CliArgs> {
 }
 
 fn run(cli_args: CliArgs, env: CliEnv) -> Result<()> {
-    let git_dir = unsafe { env.git_dir.to_str().unwrap_unchecked() };
+    let git_dir = env.git_dir.to_str().unwrap();
     let mut cli = Cli::new();
 
     match cli_args {
@@ -52,9 +55,10 @@ fn run(cli_args: CliArgs, env: CliEnv) -> Result<()> {
             let gitignore = env.work_tree.join(".gitignore");
             std::fs::write(&gitignore, format!("{}\n", DIR_NAME))?;
 
-            let array: [&[&str]; 2] = [
-                &["add", unsafe { gitignore.to_str().unwrap_unchecked() }],
-                &["commit", "-m", &format!("ignore {}", DIR_NAME)],
+            let array: [&[&str]; 3] = [
+                &["add", gitignore.to_str().unwrap()],
+                &["commit", "-m", "ignore git dir"],
+                NO_SHOW_UNTRACKED,
             ];
             for args in array {
                 cli.with_env_run(&env, args)?;
@@ -68,13 +72,12 @@ fn run(cli_args: CliArgs, env: CliEnv) -> Result<()> {
                 &["checkout"],
                 &[
                     "config",
-                    "--local",
                     "remote.origin.fetch",
                     "+refs/heads/*:refs/remotes/origin/*",
                 ],
                 &["fetch", "origin"],
                 &["branch", "-u", "origin/main"],
-                &["config", "--local", "status.showUntrackedFiles", "no"],
+                NO_SHOW_UNTRACKED,
             ];
             for args in array {
                 cli.with_env_run(&env, args)?;
@@ -153,4 +156,17 @@ enum CliArgs {
     LazyGit(Option<Vec<String>>),
 }
 
-fn help_message() {}
+fn help(code: i32) -> ! {
+    let msg = "Usage: dfm <Flag> or <Commands>
+
+Flags:
+  --init              Initialize a new dotfile repository
+  --clone <url>       Clone an existing dotfile repository
+  -h|--help           Show this help message
+
+Commands:
+  lz|lazy|lazygit     Launch lazygit with dotfile environment
+  <git args>          Pass through to git with environment set";
+    eprintln!("{msg}");
+    std::process::exit(code);
+}

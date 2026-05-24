@@ -8,7 +8,7 @@ name = "dfm"
 path = "src/main.rs"
 
 [profile.release]
-opt-level = "s"
+opt-level = "z"
 lto = "fat"
 panic = "abort"
 
