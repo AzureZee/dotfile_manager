@@ -1,4 +1,4 @@
-use std::io::Result;
+use std::io::{Result, Write};
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -6,15 +6,15 @@ const DIR_NAME: &str = ".cfg";
 const NO_SHOW_UNTRACKED: &[&str] = &["config", "status.showUntrackedFiles", "no"];
 
 fn main() -> Result<()> {
-    let args = args_parse();
-    let Some(args) = args else {
+    let action = cli_parse();
+    let Some(action) = action else {
         help(1);
     };
 
-    run(args, CliEnv::new())
+    run(action, CliEnv::new())
 }
 
-fn args_parse() -> Option<CliArgs> {
+fn cli_parse() -> Option<CliAction> {
     let mut args = std::env::args().skip(1).peekable();
     let arg = args.peek()?;
     let action = match arg.as_str() {
@@ -22,38 +22,47 @@ fn args_parse() -> Option<CliArgs> {
             help(0);
         }
 
-        "--init" => CliArgs::Init,
+        "--init" => CliAction::Init,
 
         "--clone" => {
             args.next();
             let url = args.next()?;
-            CliArgs::Clone(url)
+            CliAction::Clone(url)
         }
 
         "lz" | "lazy" | "lazygit" => {
             args.next();
             let args: Option<Vec<String>> = args.peek().is_some().then_some(args.collect());
-            CliArgs::LazyGit(args)
+            CliAction::RunLazyGit(args)
         }
 
         _ => {
             let args: Vec<String> = args.collect();
-            CliArgs::Git(args)
+            CliAction::RunGit(args)
         }
     };
     Some(action)
 }
 
-fn run(cli_args: CliArgs, env: CliEnv) -> Result<()> {
+fn run(action: CliAction, env: CliEnv) -> Result<()> {
     let git_dir = env.git_dir.to_str().unwrap();
-    let mut cli = Cli::new();
+    let mut git = GitWrapper::new();
 
-    match cli_args {
-        CliArgs::Init => {
-            cli.run_git(&["init", "--bare", git_dir])?;
+    match action {
+        CliAction::Init => {
+            git.run(&["init", "--bare", git_dir])?;
 
             let gitignore = env.work_tree.join(".gitignore");
-            std::fs::write(&gitignore, format!("{}\n", DIR_NAME))?;
+            let content = format!("{}\n", DIR_NAME);
+
+            if gitignore.exists() {
+                std::fs::OpenOptions::new()
+                    .append(true)
+                    .open(&gitignore)?
+                    .write_all(content.as_bytes())?;
+            } else {
+                std::fs::write(&gitignore, content)?;
+            }
 
             let array: [&[&str]; 3] = [
                 &["add", gitignore.to_str().unwrap()],
@@ -61,12 +70,12 @@ fn run(cli_args: CliArgs, env: CliEnv) -> Result<()> {
                 NO_SHOW_UNTRACKED,
             ];
             for args in array {
-                cli.with_env_run(&env, args)?;
+                git.run_with_env(&env, args)?;
             }
         }
 
-        CliArgs::Clone(url) => {
-            cli.run_git(&["clone", "--bare", url.as_str(), git_dir])?;
+        CliAction::Clone(url) => {
+            git.run(&["clone", "--bare", url.as_str(), git_dir])?;
 
             let array: [&[&str]; 5] = [
                 &["checkout"],
@@ -80,28 +89,28 @@ fn run(cli_args: CliArgs, env: CliEnv) -> Result<()> {
                 NO_SHOW_UNTRACKED,
             ];
             for args in array {
-                cli.with_env_run(&env, args)?;
+                git.run_with_env(&env, args)?;
             }
         }
-        CliArgs::Git(args) => {
-            cli.with_env(&env);
-            cli.cmd.args(args);
-            cli.cmd.spawn()?.wait().map(|_| ())?;
+        CliAction::RunGit(args) => {
+            git.with_env(&env);
+            git.cmd.args(args);
+            git.spawn()?;
         }
 
-        CliArgs::LazyGit(args) => {
-            cli.cmd = Command::new("lazygit");
-            cli.with_env(&env);
+        CliAction::RunLazyGit(args) => {
+            git.cmd = Command::new("lazygit");
+            git.with_env(&env);
             if let Some(args) = args {
-                cli.cmd.args(args);
+                git.cmd.args(args);
             }
-            cli.cmd.spawn()?.wait().map(|_| ())?;
+            git.spawn()?;
         }
     }
     Ok(())
 }
 
-impl Cli {
+impl GitWrapper {
     fn new() -> Self {
         let cmd = Command::new("git");
         Self { cmd }
@@ -113,19 +122,23 @@ impl Cli {
             .env("GIT_WORK_TREE", &env.work_tree);
     }
 
-    fn with_env_run(&mut self, env: &CliEnv, args: &[&str]) -> Result<()> {
+    fn run_with_env(&mut self, env: &CliEnv, args: &[&str]) -> Result<()> {
         self.cmd = Command::new("git");
         self.with_env(env);
-        self.run_git(args)
+        self.run(args)
     }
 
-    fn run_git(&mut self, args: &[&str]) -> Result<()> {
+    fn run(&mut self, args: &[&str]) -> Result<()> {
         self.cmd.args(args);
+        self.spawn()
+    }
+
+    fn spawn(&mut self) -> Result<()> {
         self.cmd.spawn()?.wait().map(|_| ())
     }
 }
 
-struct Cli {
+struct GitWrapper {
     cmd: Command,
 }
 
@@ -149,11 +162,11 @@ impl CliEnv {
     }
 }
 
-enum CliArgs {
+enum CliAction {
     Init,
     Clone(String),
-    Git(Vec<String>),
-    LazyGit(Option<Vec<String>>),
+    RunGit(Vec<String>),
+    RunLazyGit(Option<Vec<String>>),
 }
 
 fn help(code: i32) -> ! {
