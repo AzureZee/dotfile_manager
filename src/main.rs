@@ -1,3 +1,4 @@
+use std::ffi::OsStr;
 use std::io::{self, Result, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,7 +29,7 @@ fn cli_parse() -> Option<CliAction> {
         "--clone" => {
             args.next();
             let url = args.next()?;
-            CliAction::Clone(url)
+            CliAction::Clone(url, args.next())
         }
 
         #[cfg(target_os = "windows")]
@@ -62,9 +63,17 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
 
     match action {
         CliAction::Init => {
-            git.run(&["init", "--bare", git_dir])?;
-
             let gitignore = env.work_tree.join(".gitignore");
+
+            let steps: [&[&str]; 4] = [
+                &["init", "--bare", git_dir],
+                &["add", path_try_to_str(&gitignore)?],
+                &["commit", "-m", "ignore git dir"],
+                NO_SHOW_UNTRACKED,
+            ];
+
+            git.run(steps[0])?;
+
             let content = format!("{}\n", GIT_DIR_NAME);
 
             if gitignore.exists() {
@@ -76,13 +85,8 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
                 std::fs::write(&gitignore, content)?;
             }
 
-            let steps: [&[&str]; 3] = [
-                &["add", path_try_to_str(&gitignore)?],
-                &["commit", "-m", "ignore git dir"],
-                NO_SHOW_UNTRACKED,
-            ];
-            for args in steps {
-                git.run_with_env(&env, args)?;
+            for args in &steps[1..] {
+                git.run_with_env(&env, *args)?;
             }
         }
 
@@ -91,28 +95,28 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
             helper::hide_dotfile_in_dir(path)?;
         }
 
-        CliAction::Clone(url) => {
-            git.run(&["clone", "--bare", url.as_str(), git_dir])?;
-
-            let steps: [&[&str]; 5] = [
-                &["checkout"],
+        CliAction::Clone(url, branch) => {
+            let steps: [&[&str]; 4] = [
+                &["clone", "--bare", url.as_str(), git_dir],
                 &[
                     "config",
                     "remote.origin.fetch",
                     "+refs/heads/*:refs/remotes/origin/*",
                 ],
-                &["fetch", "origin"],
-                &["branch", "-u", "origin/main"],
+                &["fetch"],
                 NO_SHOW_UNTRACKED,
             ];
+
             for args in steps {
                 git.run_with_env(&env, args)?;
             }
+
+            if let Some(branch) = branch {
+                git.run_with_env(&env, ["checkout", branch.as_str()])?;
+            }
         }
         CliAction::RunGit(args) => {
-            git.with_env(&env);
-            git.cmd.args(args);
-            git.spawn()?;
+            git.run_with_env(&env, args)?;
         }
 
         CliAction::RunLazyGit(args) => {
@@ -139,13 +143,21 @@ impl GitWrapper {
             .env("GIT_WORK_TREE", &env.work_tree);
     }
 
-    fn run_with_env(&mut self, env: &CliEnv, args: &[&str]) -> Result<()> {
+    fn run_with_env<I, S>(&mut self, env: &CliEnv, args: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
         self.cmd = Command::new("git");
         self.with_env(env);
         self.run(args)
     }
 
-    fn run(&mut self, args: &[&str]) -> Result<()> {
+    fn run<I, S>(&mut self, args: I) -> Result<()>
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
         self.cmd.args(args);
         self.spawn()
     }
@@ -183,7 +195,7 @@ enum CliAction {
     Init,
     #[cfg(target_os = "windows")]
     HideDotfile(String),
-    Clone(String),
+    Clone(String, Option<String>),
     RunGit(Vec<String>),
     RunLazyGit(Option<Vec<String>>),
 }
@@ -196,8 +208,9 @@ fn help(code: i32) -> ! {
     let msg = "Usage: dfm <Flag> or <Commands>
 
 Flags:
-  --init                  Initialize a new dotfile repository
-  --clone <url>           Clone an existing dotfile repository
+  --init                  Initialize a new dotfile repository in $HOME
+  --clone <url> [branch]  Clone an existing dotfile repository,
+                          after checkout branch(optional)
   --hide-dotfile <dir>    Hidden dotfiles in <dir>
   -h|--help               Show this help message
 
