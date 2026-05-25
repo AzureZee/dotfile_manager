@@ -32,8 +32,10 @@ fn cli_parse() -> Option<CliAction> {
             CliAction::Clone(url, args.next())
         }
 
-        #[cfg(target_os = "windows")]
         "--hide-dotfile" => {
+            #[cfg(not(target_os = "windows"))]
+            help(1);
+
             args.next();
             let path = args.next()?;
             CliAction::HideDotfile(path)
@@ -211,7 +213,7 @@ Flags:
   --init                  Initialize a new dotfile repository in $HOME
   --clone <url> [branch]  Clone an existing dotfile repository,
                           after checkout branch(optional)
-  --hide-dotfile <dir>    Hidden dotfiles in <dir>
+  --hide-dotfile <dir>    Hidden dotfiles in <dir>(Windows only)
   -h|--help               Show this help message
 
 Commands:
