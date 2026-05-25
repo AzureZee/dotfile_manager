@@ -2,6 +2,11 @@ use std::io::{Result, Write};
 use std::path::PathBuf;
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+mod winapi;
+#[cfg(target_os = "windows")]
+mod helper;
+
 const DIR_NAME: &str = ".cfg";
 const NO_SHOW_UNTRACKED: &[&str] = &["config", "status.showUntrackedFiles", "no"];
 
@@ -18,16 +23,23 @@ fn cli_parse() -> Option<CliAction> {
     let mut args = std::env::args().skip(1).peekable();
     let arg = args.peek()?;
     let action = match arg.as_str() {
-        "-h" | "--help" => {
-            help(0);
-        }
-
         "--init" => CliAction::Init,
 
         "--clone" => {
             args.next();
             let url = args.next()?;
             CliAction::Clone(url)
+        }
+
+        #[cfg(target_os = "windows")]
+        "--hide-dotfile" => {
+            args.next();
+            let path = args.next()?;
+            CliAction::HideDotfile(path)
+        },
+
+        "-h" | "--help" => {
+            help(0);
         }
 
         "lz" | "lazy" | "lazygit" => {
@@ -64,20 +76,25 @@ fn run(action: CliAction, env: CliEnv) -> Result<()> {
                 std::fs::write(&gitignore, content)?;
             }
 
-            let array: [&[&str]; 3] = [
+            let steps: [&[&str]; 3] = [
                 &["add", gitignore.to_str().unwrap()],
                 &["commit", "-m", "ignore git dir"],
                 NO_SHOW_UNTRACKED,
             ];
-            for args in array {
+            for args in steps {
                 git.run_with_env(&env, args)?;
             }
+        }
+
+        #[cfg(target_os = "windows")]
+        CliAction::HideDotfile(path) => {
+            helper::hide_dotfile_in_dir(path)?;
         }
 
         CliAction::Clone(url) => {
             git.run(&["clone", "--bare", url.as_str(), git_dir])?;
 
-            let array: [&[&str]; 5] = [
+            let steps: [&[&str]; 5] = [
                 &["checkout"],
                 &[
                     "config",
@@ -88,7 +105,7 @@ fn run(action: CliAction, env: CliEnv) -> Result<()> {
                 &["branch", "-u", "origin/main"],
                 NO_SHOW_UNTRACKED,
             ];
-            for args in array {
+            for args in steps {
                 git.run_with_env(&env, args)?;
             }
         }
@@ -164,6 +181,8 @@ impl CliEnv {
 
 enum CliAction {
     Init,
+    #[cfg(target_os = "windows")]
+    HideDotfile(String),
     Clone(String),
     RunGit(Vec<String>),
     RunLazyGit(Option<Vec<String>>),
@@ -173,13 +192,15 @@ fn help(code: i32) -> ! {
     let msg = "Usage: dfm <Flag> or <Commands>
 
 Flags:
-  --init              Initialize a new dotfile repository
-  --clone <url>       Clone an existing dotfile repository
-  -h|--help           Show this help message
+  --init                  Initialize a new dotfile repository
+  --clone <url>           Clone an existing dotfile repository
+  --hide-dotfile <dir>    Hidden dotfiles in <dir>
+  -h|--help               Show this help message
 
 Commands:
   lz|lazy|lazygit     Launch lazygit with dotfile environment
   <git args>          Pass through to git with environment set";
+
     eprintln!("{msg}");
     std::process::exit(code);
 }
