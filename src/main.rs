@@ -7,7 +7,7 @@ mod winapi;
 #[cfg(target_os = "windows")]
 mod helper;
 
-const DIR_NAME: &str = ".cfg";
+const GIT_DIR_NAME: &str = ".cfg";
 const NO_SHOW_UNTRACKED: &[&str] = &["config", "status.showUntrackedFiles", "no"];
 
 fn main() -> Result<()> {
@@ -16,7 +16,7 @@ fn main() -> Result<()> {
         help(1);
     };
 
-    run(action, CliEnv::new())
+    cli_run(action, CliEnv::new())
 }
 
 fn cli_parse() -> Option<CliAction> {
@@ -56,7 +56,7 @@ fn cli_parse() -> Option<CliAction> {
     Some(action)
 }
 
-fn run(action: CliAction, env: CliEnv) -> Result<()> {
+fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
     let git_dir = env.git_dir.to_str().unwrap();
     let mut git = GitWrapper::new();
 
@@ -65,7 +65,7 @@ fn run(action: CliAction, env: CliEnv) -> Result<()> {
             git.run(&["init", "--bare", git_dir])?;
 
             let gitignore = env.work_tree.join(".gitignore");
-            let content = format!("{}\n", DIR_NAME);
+            let content = format!("{}\n", GIT_DIR_NAME);
 
             if gitignore.exists() {
                 std::fs::OpenOptions::new()
@@ -174,7 +174,7 @@ impl CliEnv {
         };
 
         let work_tree = dir.expect("Impossible to get your home dir!");
-        let git_dir = work_tree.join(DIR_NAME);
+        let git_dir = work_tree.join(GIT_DIR_NAME);
         Self { git_dir, work_tree }
     }
 }
@@ -199,7 +199,10 @@ Flags:
 
 Commands:
   lz|lazy|lazygit     Launch lazygit with dotfile environment
-  <git args>          Pass through to git with environment set";
+  <git args>          Pass through to git with environment set
+
+Environment Variables:
+  DFM_DEBUG=[any]  if set, using current dir. just for me debugging:)";
 
     eprintln!("{msg}");
     std::process::exit(code);
