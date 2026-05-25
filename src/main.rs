@@ -36,9 +36,12 @@ fn cli_parse() -> Option<CliAction> {
             #[cfg(not(target_os = "windows"))]
             help(1);
 
-            args.next();
-            let path = args.next()?;
-            CliAction::HideDotfile(path)
+            #[cfg(target_os = "windows")]
+            {
+                args.next();
+                let path = args.next()?;
+                CliAction::HideDotfile(path)
+            }
         }
 
         "-h" | "--help" => {
