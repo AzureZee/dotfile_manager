@@ -1,11 +1,11 @@
-use std::io::{Result, Write};
-use std::path::PathBuf;
+use std::io::{self, Result, Write};
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 #[cfg(target_os = "windows")]
-mod winapi;
-#[cfg(target_os = "windows")]
 mod helper;
+#[cfg(target_os = "windows")]
+mod winapi;
 
 const GIT_DIR_NAME: &str = ".cfg";
 const NO_SHOW_UNTRACKED: &[&str] = &["config", "status.showUntrackedFiles", "no"];
@@ -36,7 +36,7 @@ fn cli_parse() -> Option<CliAction> {
             args.next();
             let path = args.next()?;
             CliAction::HideDotfile(path)
-        },
+        }
 
         "-h" | "--help" => {
             help(0);
@@ -57,7 +57,7 @@ fn cli_parse() -> Option<CliAction> {
 }
 
 fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
-    let git_dir = env.git_dir.to_str().unwrap();
+    let git_dir = path_try_to_str(&env.git_dir)?;
     let mut git = GitWrapper::new();
 
     match action {
@@ -77,7 +77,7 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
             }
 
             let steps: [&[&str]; 3] = [
-                &["add", gitignore.to_str().unwrap()],
+                &["add", path_try_to_str(&gitignore)?],
                 &["commit", "-m", "ignore git dir"],
                 NO_SHOW_UNTRACKED,
             ];
@@ -186,6 +186,10 @@ enum CliAction {
     Clone(String),
     RunGit(Vec<String>),
     RunLazyGit(Option<Vec<String>>),
+}
+
+pub fn path_try_to_str(s: &Path) -> Result<&str> {
+    <&str>::try_from(s.as_os_str()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
 }
 
 fn help(code: i32) -> ! {
