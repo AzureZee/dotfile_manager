@@ -8,7 +8,7 @@ use crate::winapi::*;
 
 pub fn hide_dotfile_in_dir<P: AsRef<Path>>(path: P) -> io::Result<()> {
     if !path.as_ref().is_dir() {
-        return Err(io::Error::other("no dir"));
+        return Err(io::Error::from(io::ErrorKind::NotADirectory));
     }
     for entry in fs::read_dir(path)? {
         let entry = entry?;
@@ -24,16 +24,12 @@ pub fn hide_dotfile_in_dir<P: AsRef<Path>>(path: P) -> io::Result<()> {
 }
 
 pub fn hide_single<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    let path_str = to_wide(path_to_str(path.as_ref())?);
+    let path_str = to_wide(path.as_ref().as_os_str());
     let path_ptr = path_str.as_ptr();
     if !is_hidden(path_ptr)? {
-        hide(path_ptr)?;
+        set_hidden(path_ptr)?;
     }
     Ok(())
-}
-
-pub fn path_to_str(path: &Path) -> io::Result<&str> {
-    path.to_str().ok_or(io::Error::other("invalid char"))
 }
 
 pub fn check(result: i32) -> io::Result<()> {
@@ -44,21 +40,18 @@ pub fn check(result: i32) -> io::Result<()> {
     }
 }
 
-pub fn to_wide(s: &str) -> Vec<u16> {
-    OsStr::new(s)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect()
+pub fn to_wide(s: &OsStr) -> Vec<u16> {
+    s.encode_wide().chain(std::iter::once(0)).collect()
 }
 
-pub fn hide(path_ptr: PCWSTR) -> io::Result<()> {
+pub fn set_hidden(path_ptr: PCWSTR) -> io::Result<()> {
     let attrs = get_attrs(path_ptr)?;
 
     set_attrs(path_ptr, attrs | FILE_ATTRIBUTE_HIDDEN)
 }
 
 #[allow(unused)]
-pub fn unhide(path_ptr: PCWSTR) -> io::Result<()> {
+pub fn unset_hidden(path_ptr: PCWSTR) -> io::Result<()> {
     let attrs = get_attrs(path_ptr)?;
 
     set_attrs(path_ptr, attrs & !FILE_ATTRIBUTE_HIDDEN)
@@ -92,26 +85,24 @@ fn test_hide() -> io::Result<()> {
     let dir = env!("CARGO_MANIFEST_DIR");
     let dir = PathBuf::from(dir);
 
-    let ignore = dir.join(".gitignore");
-    let git_dir = dir.join(".git");
+    let path_gitignore = dir.join(".gitignore");
+    let path_git = dir.join(".git");
 
-    let git_dir = to_wide(path_to_str(&git_dir)?);
-    let ignore = to_wide(path_to_str(&ignore)?);
+    let path_str = to_wide(path_gitignore.as_os_str());
+    let gitignore = path_str.as_ptr();
 
-    let yes = is_hidden(git_dir.as_ptr())?;
-    let no = is_hidden(ignore.as_ptr())?;
+    let yes = is_hidden(to_wide(path_git.as_os_str()).as_ptr())?;
+    let no = is_hidden(gitignore)?;
 
     assert!(yes);
     assert!(!no);
 
-    let path_ptr = ignore.as_ptr();
-
-    hide(path_ptr)?;
-    let now_yes = is_hidden(path_ptr)?;
+    set_hidden(gitignore)?;
+    let now_yes = is_hidden(gitignore)?;
     assert!(now_yes);
 
-    unhide(path_ptr)?;
-    let now_no = is_hidden(path_ptr)?;
+    unset_hidden(gitignore)?;
+    let now_no = is_hidden(gitignore)?;
     assert!(!now_no);
     Ok(())
 }
