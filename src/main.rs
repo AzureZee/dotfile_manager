@@ -14,7 +14,7 @@ const NO_SHOW_UNTRACKED: &[&str] = &["config", "status.showUntrackedFiles", "no"
 fn main() -> Result<()> {
     let action = cli_parse();
     let Some(action) = action else {
-        help(1);
+        show_help(1);
     };
 
     cli_run(action, CliEnv::new())
@@ -45,7 +45,7 @@ fn cli_parse() -> Option<CliAction> {
         }
 
         "-h" | "--help" => {
-            help(0);
+            show_help(0);
         }
 
         "lz" | "lazy" | "lazygit" => {
@@ -218,7 +218,7 @@ pub fn path_try_to_str(s: &Path) -> Result<&str> {
     <&str>::try_from(s.as_os_str()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
 }
 
-fn help(code: i32) -> ! {
+fn show_help(code: i32) -> ! {
     let msg = "Usage: dfm <Flag> or <Commands>
 
 Flags:
