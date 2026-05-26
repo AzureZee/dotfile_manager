@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::io::{self, Result, Write};
+use std::io::{Result, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
@@ -58,7 +58,7 @@ fn cli_parse() -> Option<CliAction> {
 }
 
 fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
-    let git_dir = path_try_to_str(&env.git_dir)?;
+    let git_dir = path_to_str(&env.git_dir);
     let mut git = GitWrapper::new();
 
     match action {
@@ -67,7 +67,7 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
 
             let steps: [&[&str]; 4] = [
                 &["init", "--bare", git_dir],
-                &["add", path_try_to_str(&gitignore)?],
+                &["add", path_to_str(&gitignore)],
                 &["commit", "-m", "ignore git dir"],
                 NO_SHOW_UNTRACKED,
             ];
@@ -209,8 +209,8 @@ enum CliAction {
     RunLazyGit(Option<Vec<String>>),
 }
 
-pub fn path_try_to_str(s: &Path) -> Result<&str> {
-    <&str>::try_from(s.as_os_str()).map_err(|_| io::Error::from(io::ErrorKind::InvalidInput))
+fn path_to_str(s: &Path) -> &str {
+    unsafe { str::from_utf8_unchecked(s.as_os_str().as_encoded_bytes()) }
 }
 
 fn show_help(code: i32) -> ! {
