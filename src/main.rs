@@ -32,7 +32,7 @@ fn cli_parse() -> Option<CliAction> {
             CliAction::Clone(url, args.next())
         }
 
-        "--hide-dotfile" => {
+        "-H" | "--hide" => {
             #[cfg(not(target_os = "windows"))]
             help(1);
 
@@ -40,7 +40,7 @@ fn cli_parse() -> Option<CliAction> {
             {
                 args.next();
                 let path = args.next()?;
-                CliAction::HideDotfile(path)
+                CliAction::HideDotfile(path, args.next().is_some_and(|s| &s == "no"))
             }
         }
 
@@ -95,11 +95,6 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
             }
         }
 
-        #[cfg(target_os = "windows")]
-        CliAction::HideDotfile(path) => {
-            helper::hide_dotfile_in_dir(path)?;
-        }
-
         CliAction::Clone(url, branch) => {
             let steps: [&[&str]; 4] = [
                 &["clone", "--bare", url.as_str(), git_dir],
@@ -120,6 +115,20 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
                 git.run_with_env(&env, ["checkout", branch.as_str()])?;
             }
         }
+
+        #[cfg(target_os = "windows")]
+        CliAction::HideDotfile(path, was_hidden) => {
+            use helper::*;
+            set_dotfile_attr_in_dir(
+                path.into(),
+                if !was_hidden {
+                    set_hidden
+                } else {
+                    unset_hidden
+                },
+            )?;
+        }
+
         CliAction::RunGit(args) => {
             git.run_with_env(&env, args)?;
         }
@@ -199,7 +208,7 @@ impl CliEnv {
 enum CliAction {
     Init,
     #[cfg(target_os = "windows")]
-    HideDotfile(String),
+    HideDotfile(String, bool),
     Clone(String, Option<String>),
     RunGit(Vec<String>),
     RunLazyGit(Option<Vec<String>>),
@@ -216,7 +225,8 @@ Flags:
   --init                  Initialize a new dotfile repository in $HOME
   --clone <url> [branch]  Clone an existing dotfile repository,
                           after checkout branch(optional)
-  --hide-dotfile <dir>    Hidden dotfiles in <dir>(Windows only)
+  -H|--hide <dir> [no]    Hidden dotfiles in <dir>(Windows only).
+                          if with [no], unset hidden.
   -h|--help               Show this help message
 
 Commands:

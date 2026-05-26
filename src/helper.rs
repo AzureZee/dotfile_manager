@@ -3,13 +3,20 @@ use std::fs;
 use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::path::Path;
+use std::path::PathBuf;
 
 use crate::winapi::*;
 
-pub fn hide_dotfile_in_dir<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    if !path.as_ref().is_dir() {
+pub fn set_dotfile_attr_in_dir<F>(path: PathBuf, op: F) -> io::Result<()>
+where
+    F: Fn(PCWSTR) -> io::Result<()>,
+{
+    if !path.is_dir() {
         return Err(io::Error::from(io::ErrorKind::NotADirectory));
     }
+
+    let mut count = 0;
+
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let name_string = entry.file_name();
@@ -17,19 +24,23 @@ pub fn hide_dotfile_in_dir<P: AsRef<Path>>(path: P) -> io::Result<()> {
 
         if name_str.starts_with('.') {
             let path = entry.path();
-            hide_single(&path)?;
+            set_single(&path,&op)?;
+            count += 1;
         }
     }
+
+    println!("{count} files changed");
     Ok(())
 }
 
-pub fn hide_single<P: AsRef<Path>>(path: P) -> io::Result<()> {
-    let path_str = to_wide(path.as_ref().as_os_str());
+fn set_single<F>(path: &Path, op: F)-> io::Result<()>
+where
+    F: Fn(PCWSTR) -> io::Result<()>,
+
+ {
+    let path_str = to_wide(path.as_os_str());
     let path_ptr = path_str.as_ptr();
-    if !is_hidden(path_ptr)? {
-        set_hidden(path_ptr)?;
-    }
-    Ok(())
+    op(path_ptr)
 }
 
 pub fn check(result: i32) -> io::Result<()> {
@@ -50,13 +61,13 @@ pub fn set_hidden(path_ptr: PCWSTR) -> io::Result<()> {
     set_attrs(path_ptr, attrs | FILE_ATTRIBUTE_HIDDEN)
 }
 
-#[allow(unused)]
 pub fn unset_hidden(path_ptr: PCWSTR) -> io::Result<()> {
     let attrs = get_attrs(path_ptr)?;
 
     set_attrs(path_ptr, attrs & !FILE_ATTRIBUTE_HIDDEN)
 }
 
+#[allow(dead_code)]
 pub fn is_hidden(path_ptr: PCWSTR) -> io::Result<bool> {
     let attrs = get_attrs(path_ptr)?;
 
