@@ -1,6 +1,6 @@
 use std::ffi::OsStr;
 use std::io::{Result, Write};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::process::Command;
 
 #[cfg(target_os = "windows")]
@@ -58,7 +58,7 @@ fn cli_parse() -> Option<CliAction> {
 }
 
 fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
-    let git_dir = path_to_str(&env.git_dir);
+    let git_dir = &env.git_dir.to_string_lossy();
     let mut git = GitWrapper::new();
 
     match action {
@@ -67,7 +67,7 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
 
             let steps: [&[&str]; 4] = [
                 &["init", "--bare", git_dir],
-                &["add", path_to_str(&gitignore)],
+                &["add", &gitignore.to_string_lossy()],
                 &["commit", "-m", "ignore git dir"],
                 NO_SHOW_UNTRACKED,
             ];
@@ -207,10 +207,6 @@ enum CliAction {
     Clone(String, Option<String>),
     RunGit(Vec<String>),
     RunLazyGit(Option<Vec<String>>),
-}
-
-fn path_to_str(s: &Path) -> &str {
-    unsafe { str::from_utf8_unchecked(s.as_os_str().as_encoded_bytes()) }
 }
 
 fn show_help(code: i32) -> ! {
