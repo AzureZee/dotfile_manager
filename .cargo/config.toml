@@ -1,7 +1,16 @@
-# reference: https://github.com/microsoft/edit/blob/main/Cargo.toml
+# reference:
+# https://github.com/microsoft/edit/blob/main/Cargo.toml
+# https://github.com/johnthagen/min-sized-rust
+
 [profile.release]
 panic = "immediate-abort"
 
 [unstable]
 panic-immediate-abort = true
 build-std = ["std", "panic_abort"]
+build-std-features = ["optimize_for_size"]
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+  "-C","link-arg=-Wl,-z,pack-relative-relocs",
+]
