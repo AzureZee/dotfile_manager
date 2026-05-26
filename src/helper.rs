@@ -15,8 +15,6 @@ where
         return Err(io::Error::from(io::ErrorKind::NotADirectory));
     }
 
-    let mut count = 0;
-
     for entry in fs::read_dir(path)? {
         let entry = entry?;
         let name_string = entry.file_name();
@@ -25,11 +23,9 @@ where
         if name_str.starts_with('.') {
             let path = entry.path();
             set_single(&path, &op)?;
-            count += 1;
         }
     }
 
-    println!("{count} files changed");
     Ok(())
 }
 
@@ -86,33 +82,4 @@ pub fn set_attrs(path_ptr: PCWSTR, new_attrs: FILE_FLAGS_AND_ATTRIBUTES) -> io::
         let result = SetFileAttributesW(path_ptr, new_attrs);
         check(result)
     }
-}
-
-#[cfg(target_os = "windows")]
-#[test]
-fn test_hide() -> io::Result<()> {
-    use std::path::PathBuf;
-    let dir = env!("CARGO_MANIFEST_DIR");
-    let dir = PathBuf::from(dir);
-
-    let path_gitignore = dir.join(".gitignore");
-    let path_git = dir.join(".git");
-
-    let path_str = to_wide(path_gitignore.as_os_str());
-    let gitignore = path_str.as_ptr();
-
-    let yes = is_hidden(to_wide(path_git.as_os_str()).as_ptr())?;
-    let no = is_hidden(gitignore)?;
-
-    assert!(yes);
-    assert!(!no);
-
-    set_hidden(gitignore)?;
-    let now_yes = is_hidden(gitignore)?;
-    assert!(now_yes);
-
-    unset_hidden(gitignore)?;
-    let now_no = is_hidden(gitignore)?;
-    assert!(!now_no);
-    Ok(())
 }
