@@ -32,16 +32,11 @@ fn cli_parse() -> Option<CliAction> {
             CliAction::Clone(url, args.next())
         }
 
+        #[cfg(target_os = "windows")]
         "-H" | "--hide" => {
-            #[cfg(not(target_os = "windows"))]
-            help(1);
-
-            #[cfg(target_os = "windows")]
-            {
-                args.next();
-                let path = args.next()?;
-                CliAction::HideDotfile(path, args.next().is_some_and(|s| &s == "no"))
-            }
+            args.next();
+            let path = args.next()?;
+            CliAction::HideDotfile(path, args.next().is_some_and(|s| &s == "no"))
         }
 
         "-h" | "--help" => {
