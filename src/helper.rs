@@ -24,7 +24,7 @@ where
 
         if name_str.starts_with('.') {
             let path = entry.path();
-            set_single(&path,&op)?;
+            set_single(&path, &op)?;
             count += 1;
         }
     }
@@ -33,11 +33,10 @@ where
     Ok(())
 }
 
-fn set_single<F>(path: &Path, op: F)-> io::Result<()>
+fn set_single<F>(path: &Path, op: F) -> io::Result<()>
 where
     F: Fn(PCWSTR) -> io::Result<()>,
-
- {
+{
     let path_str = to_wide(path.as_os_str());
     let path_ptr = path_str.as_ptr();
     op(path_ptr)
