@@ -18,3 +18,6 @@ build-std-features = ["optimize_for_size"]
 rustflags = [
   "-C","link-arg=-Wl,-z,pack-relative-relocs",
 ]
+
+[target.x86_64-pc-windows-msvc]
+linker = "rust-lld.exe"

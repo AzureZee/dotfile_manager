@@ -77,14 +77,14 @@ jobs:
         with:
           path: artifacts
 
-      - id: date
+      - id: tag
         run: |
-          echo "date=$(date -u +%Y%m%d-%H%M%S)" >> $GITHUB_OUTPUT
+          echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
 
       - uses: softprops/action-gh-release@v3
         with:
-          tag_name: release
-          name: Build ${{ steps.date.outputs.date }}
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
           prerelease: false
           files: artifacts/**/*
           overwrite_files: true
