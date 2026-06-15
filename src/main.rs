@@ -1,5 +1,5 @@
 use std::ffi::OsStr;
-use std::io::{Result, Write};
+use std::io::Result;
 use std::path::PathBuf;
 use std::process::Command;
 
@@ -63,30 +63,26 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
 
     match action {
         CliAction::Init => {
+            git.run(["init", "--bare", git_dir])?;
+            git.run_with_env(&env, NO_SHOW_UNTRACKED)?;
+
             let gitignore = env.work_tree.join(".gitignore");
 
-            let steps: [&[&str]; 4] = [
-                &["init", "--bare", git_dir],
-                &["add", &gitignore.to_string_lossy()],
-                &["commit", "-m", "ignore git dir"],
-                NO_SHOW_UNTRACKED,
-            ];
+            if !gitignore.exists() {
+                std::fs::write(&gitignore, GITIGNORE_CONTENT)?;
 
-            git.run(steps[0])?;
-
-            let content = format!("{}\n", GIT_DIR_NAME);
-
-            if gitignore.exists() {
-                std::fs::OpenOptions::new()
-                    .append(true)
-                    .open(&gitignore)?
-                    .write_all(content.as_bytes())?;
+                let steps: [&[&str]; 2] = [
+                    &["add", &gitignore.to_string_lossy()],
+                    &["commit", "-m", "add .gitignore"],
+                ];
+                for args in &steps[..] {
+                    git.run_with_env(&env, *args)?;
+                }
             } else {
-                std::fs::write(&gitignore, content)?;
-            }
-
-            for args in &steps[1..] {
-                git.run_with_env(&env, *args)?;
+                println!(
+                    "\n`.gitignore` already exists,\nplease add follow content to your `.gitignore`.\n{}",
+                    GITIGNORE_CONTENT
+                )
             }
         }
 
@@ -230,3 +226,19 @@ Environment Variables:
     eprintln!("{msg}");
     std::process::exit(code);
 }
+
+const GITIGNORE_CONTENT: &str = "# ignore all
+*
+
+# white list
+!.config/
+!.config/**
+!.bashrc
+!.zshrc
+!.gitconfig*
+!.gitignore*
+!.*profile
+
+# black list
+.cfg/
+";
