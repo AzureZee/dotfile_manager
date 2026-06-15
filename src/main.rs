@@ -31,6 +31,7 @@ fn cli_parse() -> Option<CliAction> {
             let url = args.next()?;
             CliAction::Clone(url, args.next())
         }
+        "--echo-env" => CliAction::EchoEnv,
 
         #[cfg(target_os = "windows")]
         "-H" | "--hide" => {
@@ -132,6 +133,14 @@ fn cli_run(action: CliAction, env: CliEnv) -> Result<()> {
             }
             git.spawn()?;
         }
+
+        CliAction::EchoEnv => {
+            println!(
+                "GIT_DIR: {}\nGIT_WORK_TREE: {}",
+                git_dir,
+                env.work_tree.display()
+            );
+        }
     }
     Ok(())
 }
@@ -198,6 +207,7 @@ impl CliEnv {
 
 enum CliAction {
     Init,
+    EchoEnv,
     #[cfg(target_os = "windows")]
     HideDotfile(String, bool),
     Clone(String, Option<String>),
@@ -212,6 +222,7 @@ Flags:
   --init                  Initialize a new dotfile repository in $HOME
   --clone <url> [branch]  Clone an existing dotfile repository,
                           after checkout branch(optional)
+  --echo-env              Print current env.
   -H|--hide <dir> [no]    Hidden dotfiles in <dir>(Windows only).
                           if with [no], unset hidden.
   -h|--help               Show this help message
